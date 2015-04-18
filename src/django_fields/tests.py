@@ -8,6 +8,10 @@ try:
     from sys import maxint
 except ImportError:
     from sys import maxsize as maxint
+import sys
+if sys.version > '3':
+    long = int
+from builtins import map
 
 from django.db import connection
 from django.db import models
@@ -89,7 +93,7 @@ class EncryptTests(unittest.TestCase):
         # ...but the value in the database should not
         encrypted_password = self._get_encrypted_password(obj.id)
         self.assertNotEqual(encrypted_password, password)
-        self.assertTrue(encrypted_password.startswith('$AES$'))
+        self.assertTrue(encrypted_password.startswith(b'$AES$'))
 
     def test_encryption_w_cipher(self):
         """
@@ -105,7 +109,7 @@ class EncryptTests(unittest.TestCase):
         # ...but the value in the database should not
         encrypted_password = self._get_encrypted_password_cipher(obj.id)
         self.assertNotEqual(encrypted_password, password)
-        self.assertTrue(encrypted_password.startswith('$AES$MODE_CBC$'))
+        self.assertTrue(encrypted_password.startswith(b'$AES$MODE_CBC$'))
 
     def test_multiple_encryption_w_cipher(self):
         """
@@ -179,14 +183,14 @@ class EncryptTests(unittest.TestCase):
     def _get_encrypted_password(self, id):
         cursor = connection.cursor()
         cursor.execute("select password from django_fields_encobject where id = %s", [id,])
-        passwords = map(lambda x: x[0], cursor.fetchall())
+        passwords = list(map(lambda x: x[0], cursor.fetchall()))
         self.assertEqual(len(passwords), 1)  # only one
         return passwords[0]
 
     def _get_encrypted_password_cipher(self, id):
         cursor = connection.cursor()
         cursor.execute("select password from django_fields_cipherencobject where id = %s", [id,])
-        passwords = map(lambda x: x[0], cursor.fetchall())
+        passwords = list(map(lambda x: x[0], cursor.fetchall()))
         self.assertEqual(len(passwords), 1)  # only one
         return passwords[0]
 
@@ -241,14 +245,14 @@ class DateEncryptTests(unittest.TestCase):
     def _get_encrypted_date(self, id):
         cursor = connection.cursor()
         cursor.execute("select important_date from django_fields_encdate where id = %s", [id,])
-        important_dates = map(lambda x: x[0], cursor.fetchall())
+        important_dates = list(map(lambda x: x[0], cursor.fetchall()))
         self.assertEqual(len(important_dates), 1)  # only one
         return important_dates[0]
 
     def _get_encrypted_datetime(self, id):
         cursor = connection.cursor()
         cursor.execute("select important_datetime from django_fields_encdatetime where id = %s", [id,])
-        important_datetimes = map(lambda x: x[0], cursor.fetchall())
+        important_datetimes = list(map(lambda x: x[0], cursor.fetchall()))
         self.assertEqual(len(important_datetimes), 1)  # only one
         return important_datetimes[0]
 
@@ -266,7 +270,7 @@ class NumberEncryptTests(unittest.TestCase):
         self._test_number_encryption(EncInt, 'int', -maxint - 1)
 
     def test_long_encryption(self):
-        self._test_number_encryption(EncLong, 'long', long(maxint) * 100L)
+        self._test_number_encryption(EncLong, 'long', long(maxint) * long(100))
 
     def test_float_encryption(self):
         value = 123.456 + maxint
@@ -291,7 +295,7 @@ class NumberEncryptTests(unittest.TestCase):
         cursor = connection.cursor()
         sql = "select important_number from django_fields_enc%s where id = %%s" % (type_name,)
         cursor.execute(sql, [id,])
-        important_numbers = map(lambda x: x[0], cursor.fetchall())
+        important_numbers = list(map(lambda x: x[0], cursor.fetchall()))
         self.assertEqual(len(important_numbers), 1)  # only one
         return important_numbers[0]
 
@@ -398,7 +402,7 @@ class EncryptEmailTests(unittest.TestCase):
     def _get_encrypted_email(self, id):
         cursor = connection.cursor()
         cursor.execute("select email from django_fields_emailobject where id = %s", [id,])
-        emails = map(lambda x: x[0], cursor.fetchall())
+        emails = list(map(lambda x: x[0], cursor.fetchall()))
         self.assertEqual(len(emails), 1)  # only one
         return emails[0]
 

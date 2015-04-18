@@ -14,7 +14,7 @@ from django import forms
 from django.forms import fields
 from django.db import models
 from django.conf import settings
-from django.utils.encoding import smart_str
+from django.utils.encoding import smart_bytes, smart_str
 try:
     from django.utils.encoding import force_unicode as force_text
 except ImportError:
@@ -126,27 +126,27 @@ class BaseEncryptedField(models.Field):
         if value is None:
             return None
 
-        value = smart_str(value)
+        value = smart_bytes(value)
 
         if not self._is_encrypted(value):
             padding = self._get_padding(value)
             if padding > 0:
-                value += "\0" + ''.join([
+                value += smart_bytes("\0" + ''.join([
                     random.choice(string.printable)
                     for index in range(padding-1)
-                ])
+                ]))
             if self.block_type:
                 self.cipher = self.cipher_object.new(
                     self.secret_key,
                     getattr(self.cipher_object, self.block_type),
                     self.iv)
-                value = self.prefix + binascii.b2a_hex(
-                    self.iv + self.cipher.encrypt(value)
-                ).decode('ascii')
+                value = smart_bytes(self.prefix) + binascii.b2a_hex(
+                    smart_bytes(self.iv) + self.cipher.encrypt(smart_bytes(value))
+                )
             else:
-                value = self.prefix + binascii.b2a_hex(
-                    self.cipher.encrypt(value)
-                ).decode('ascii')
+                value = smart_bytes(self.prefix) + binascii.b2a_hex(
+                    self.cipher.encrypt(smart_bytes(value))
+                )
         return value
 
     def deconstruct(self):
