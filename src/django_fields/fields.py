@@ -3,15 +3,28 @@ import datetime
 import string
 import sys
 import warnings
+try:
+    maxint = sys.maxint
+except AttributeError:
+    maxint = sys.maxsize
+if sys.version > '3':
+    long = int
 
 from django import forms
 from django.forms import fields
 from django.db import models
 from django.conf import settings
-from django.utils.encoding import smart_str, force_unicode
+from django.utils.encoding import smart_str
+try:
+    from django.utils.encoding import force_unicode as force_text
+except ImportError:
+    from django.utils.encoding import force_text
+
 from django.utils.translation import ugettext_lazy as _
 from Crypto import Random
 from Crypto.Random import random
+
+from builtins import str
 
 if hasattr(settings, 'USE_CPICKLE'):
     warnings.warn(
@@ -74,7 +87,7 @@ class BaseEncryptedField(models.Field):
         super(BaseEncryptedField, self).__init__(*args, **kwargs)
 
     def _is_encrypted(self, value):
-        return isinstance(value, basestring) and value.startswith(self.prefix)
+        return isinstance(value, str) and value.startswith(self.prefix)
 
     def _get_padding(self, value):
         # We always want at least 2 chars of padding (including zero byte),
@@ -82,20 +95,31 @@ class BaseEncryptedField(models.Field):
         mod = (len(value) + 2) % self.cipher.block_size
         return self.cipher.block_size - mod + 2
 
+    def parse_db_value(self, db_value_string):
+        if self.block_type:
+            self.iv = binascii.a2b_hex(
+                db_value_string[len(self.prefix):])[:len(self.iv)]
+            self.cipher = self.cipher_object.new(
+                self.secret_key,
+                getattr(self.cipher_object, self.block_type),
+                self.iv)
+            decrypt_value = binascii.a2b_hex(
+                db_value_string[len(self.prefix):])[len(self.iv):]
+        else:
+            decrypt_value = binascii.a2b_hex(
+                db_value_string[len(self.prefix):])
+        return force_text(
+            self.cipher.decrypt(decrypt_value).split(b'\0')[0])
+
+    def from_db_value(self, value, expression, connection, context):
+        if value is None:
+            return value
+        else:
+            return self.parse_db_value(value)
+
     def to_python(self, value):
         if self._is_encrypted(value):
-            if self.block_type:
-                self.iv = binascii.a2b_hex(value[len(self.prefix):])[:len(self.iv)]
-                self.cipher = self.cipher_object.new(
-                    self.secret_key,
-                    getattr(self.cipher_object, self.block_type),
-                    self.iv)
-                decrypt_value = binascii.a2b_hex(value[len(self.prefix):])[len(self.iv):]
-            else:
-                decrypt_value = binascii.a2b_hex(value[len(self.prefix):])
-            return force_unicode(
-                self.cipher.decrypt(decrypt_value).split('\0')[0]
-            )
+            return self.parse_db_value(value)
         return value
 
     def get_db_prep_value(self, value, connection=None, prepared=False):
@@ -116,9 +140,13 @@ class BaseEncryptedField(models.Field):
                     self.secret_key,
                     getattr(self.cipher_object, self.block_type),
                     self.iv)
-                value = self.prefix + binascii.b2a_hex(self.iv + self.cipher.encrypt(value))
+                value = self.prefix + binascii.b2a_hex(
+                    self.iv + self.cipher.encrypt(value)
+                ).decode('ascii')
             else:
-                value = self.prefix + binascii.b2a_hex(self.cipher.encrypt(value))
+                value = self.prefix + binascii.b2a_hex(
+                    self.cipher.encrypt(value)
+                ).decode('ascii')
         return value
 
     def deconstruct(self):
@@ -266,7 +294,7 @@ class BaseEncryptedNumberField(BaseEncryptedField):
 
 class EncryptedIntField(BaseEncryptedNumberField):
     __metaclass__ = models.SubfieldBase
-    max_raw_length = len(str(-sys.maxint - 1))
+    max_raw_length = len(str(-maxint - 1))
     number_type = int
     format_string = "%d"
 
@@ -299,7 +327,7 @@ class PickleField(models.TextField):
         return pickle.dumps(value)
 
     def to_python(self, value):
-        if not isinstance(value, basestring):
+        if not isinstance(value, str):
             return value
 
         # Tries to convert unicode objects to string, cause loads pickle from

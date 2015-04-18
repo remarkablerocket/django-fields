@@ -3,8 +3,11 @@ from __future__ import absolute_import
 
 import datetime
 import string
-import sys
 import unittest
+try:
+    from sys import maxint
+except ImportError:
+    from sys import maxsize as maxint
 
 from django.db import connection
 from django.db import models
@@ -257,20 +260,20 @@ class NumberEncryptTests(unittest.TestCase):
         EncFloat.objects.all().delete()
 
     def test_int_encryption(self):
-        self._test_number_encryption(EncInt, 'int', sys.maxint)
+        self._test_number_encryption(EncInt, 'int', maxint)
 
     def test_min_int_encryption(self):
-        self._test_number_encryption(EncInt, 'int', -sys.maxint - 1)
+        self._test_number_encryption(EncInt, 'int', -maxint - 1)
 
     def test_long_encryption(self):
-        self._test_number_encryption(EncLong, 'long', long(sys.maxint) * 100L)
+        self._test_number_encryption(EncLong, 'long', long(maxint) * 100L)
 
     def test_float_encryption(self):
-        value = 123.456 + sys.maxint
+        value = 123.456 + maxint
         self._test_number_encryption(EncFloat, 'float', value)
 
     def test_one_third_float_encryption(self):
-        value = sys.maxint + (1.0 / 3.0)
+        value = maxint + (1.0 / 3.0)
         self._test_number_encryption(EncFloat, 'float', value)
 
     def _test_number_encryption(self, number_class, type_name, value):
