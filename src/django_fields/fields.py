@@ -9,6 +9,7 @@ except AttributeError:
     maxint = sys.maxsize
 if sys.version > '3':
     long = int
+    basestring = bytes
 
 from django import forms
 from django.forms import fields
@@ -95,32 +96,33 @@ class BaseEncryptedField(models.Field):
         mod = (len(value) + 2) % self.cipher.block_size
         return self.cipher.block_size - mod + 2
 
-    def parse_db_value(self, db_value_string):
+    def parse_db_value(self, value):
+        if value is None:
+            return value
+
         if self.block_type:
             self.iv = binascii.a2b_hex(
-                db_value_string[len(self.prefix):])[:len(self.iv)]
+                value[len(self.prefix):])[:len(self.iv)]
             self.cipher = self.cipher_object.new(
                 self.secret_key,
                 getattr(self.cipher_object, self.block_type),
                 self.iv)
             decrypt_value = binascii.a2b_hex(
-                db_value_string[len(self.prefix):])[len(self.iv):]
+                value[len(self.prefix):])[len(self.iv):]
         else:
             decrypt_value = binascii.a2b_hex(
-                db_value_string[len(self.prefix):])
-        return force_text(
+                value[len(self.prefix):])
+        #return force_text(
+        #    self.cipher.decrypt(decrypt_value).split(b'\0')[0])
+        result = force_text(
             self.cipher.decrypt(decrypt_value).split(b'\0')[0])
+        return result
 
     def from_db_value(self, value, expression, connection, context):
-        if value is None:
-            return value
-        else:
-            return self.parse_db_value(value)
+        return self.parse_db_value(value)
 
     def to_python(self, value):
-        if self._is_encrypted(value):
-            return self.parse_db_value(value)
-        return value
+        return self.parse_db_value(value)
 
     def get_db_prep_value(self, value, connection=None, prepared=False):
         if value is None:
@@ -216,7 +218,13 @@ class BaseEncryptedDateField(BaseEncryptedField):
         defaults.update(kwargs)
         return super(BaseEncryptedDateField, self).formfield(**defaults)
 
+    def from_db_value(self, value, expression, connection, context):
+        return self.parse_db_value(value)
+
     def to_python(self, value):
+        return self.parse_db_value(value)
+
+    def parse_db_value(self, value):
         # value is either a date or a string in the format "YYYY:MM:DD"
 
         if value in fields.EMPTY_VALUES:
@@ -225,7 +233,7 @@ class BaseEncryptedDateField(BaseEncryptedField):
             if isinstance(value, self.date_class):
                 date_value = value
             else:
-                date_text = super(BaseEncryptedDateField, self).to_python(value)
+                date_text = super(BaseEncryptedDateField, self).parse_db_value(value)
                 date_value = self.date_class(*map(int, date_text.split(':')))
         return date_value
 
@@ -273,13 +281,18 @@ class BaseEncryptedNumberField(BaseEncryptedField):
     def get_internal_type(self):
         return 'CharField'
 
+    def from_db_value(self, value, expression, connection, context):
+        return self.parse_db_value(value)
+
     def to_python(self, value):
+        return self.parse_db_value(value)
+
+    def parse_db_value(self, value):
         # value is either an int or a string of an integer
         if isinstance(value, self.number_type) or value == '':
-            number = value
-        else:
-            number_text = super(BaseEncryptedNumberField, self).to_python(value)
-            number = self.number_type(number_text)
+            return value
+        number_text = super(BaseEncryptedNumberField, self).parse_db_value(value)
+        number = self.number_type(number_text)
         return number
 
     # def get_prep_value(self, value):
@@ -326,14 +339,14 @@ class PickleField(models.TextField):
     def get_db_prep_value(self, value, connection=None, prepared=False):
         return pickle.dumps(value)
 
-    def to_python(self, value):
-        if not isinstance(value, str):
+    def parse_db_value(self, value):
+        if not isinstance(value, basestring):
             return value
 
         # Tries to convert unicode objects to string, cause loads pickle from
         # unicode excepts ugly ``KeyError: '\x00'``.
         try:
-            return pickle.loads(smart_str(value))
+            return pickle.loads(smart_bytes(value))
         # If pickle could not loads from string it's means that it's Python
         # string saved to PickleField.
         except ValueError:
@@ -341,6 +354,11 @@ class PickleField(models.TextField):
         except EOFError:
             return value
 
+    def from_db_value(self, value, expression, connection, context):
+        return self.parse_db_value(value)
+
+    def to_python(self, value):
+        return self.parse_db_value(value)
 
 class EncryptedUSPhoneNumberField(BaseEncryptedField):
     __metaclass__ = models.SubfieldBase

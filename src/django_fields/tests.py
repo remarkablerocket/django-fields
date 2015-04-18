@@ -225,7 +225,7 @@ class DateEncryptTests(unittest.TestCase):
         self.assertEqual(today, obj.important_date)
         # ...but the value in the database should not
         important_date = self._get_encrypted_date(obj.id)
-        self.assertTrue(important_date.startswith('$AES$'))
+        self.assertTrue(important_date.startswith(b'$AES$'))
         self.assertNotEqual(important_date, today)
 
     def test_date_time_encryption(self):
@@ -237,7 +237,7 @@ class DateEncryptTests(unittest.TestCase):
         self.assertEqual(now, obj.important_datetime)
         # ...but the value in the database should not
         important_datetime = self._get_encrypted_datetime(obj.id)
-        self.assertTrue(important_datetime.startswith('$AES$'))
+        self.assertTrue(important_datetime.startswith(b'$AES$'))
         self.assertNotEqual(important_datetime, now)
 
     ### Utility methods for tests ###
@@ -288,7 +288,7 @@ class NumberEncryptTests(unittest.TestCase):
         self.assertEqual(value, obj.important_number)
         # ...but the value in the database should not
         number = self._get_encrypted_number(type_name, obj.id)
-        self.assertTrue(number.startswith('$AES$'))
+        self.assertTrue(number.startswith(b'$AES$'))
         self.assertNotEqual(number, value)
 
     def _get_encrypted_number(self, type_name, id):
@@ -360,7 +360,7 @@ class EncryptEmailTests(unittest.TestCase):
         # ...but the value in the database should not
         encrypted_email = self._get_encrypted_email(obj.id)
         self.assertNotEqual(encrypted_email, email)
-        self.assertTrue(encrypted_email.startswith('$AES$'))
+        self.assertTrue(encrypted_email.startswith(b'$AES$'))
 
     def test_max_field_length(self):
         email = 'a' * EmailObject.max_email
